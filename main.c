@@ -18,8 +18,8 @@ static void dispatch(QSignal sig);
 static int outf;
 int seed;
 
-#define CALLTIME 10 //200 or 100 or 50 or 20 or 10
-#define TOTAL_SIM_TIME 100
+#define CALLTIME 20 //200 or 100 or 50 or 20 or 10
+#define TOTAL_SIM_TIME 500
 #define TRUE 1
 #define FALSE 0
 

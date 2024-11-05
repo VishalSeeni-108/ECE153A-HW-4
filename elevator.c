@@ -19,6 +19,10 @@ typedef struct QHsmTstTag {
 	int floor_curr_call_time[5]; /* measures when request is made */
 	int floor_calls[5];          /* keeps track of how many requests were made to each floor */
 	double floor_total_time[5];  /* keeps track of cumulative time to service each request */
+
+	int emergency_call_time; 
+	int emergency_calls; 
+	double emergency_total_time; 
     
 } QHsmTst;
 
@@ -27,6 +31,7 @@ static QState QHsmTst_initial(QHsmTst *me);  /* initial pseudostate-handler */
 static QState QHsmTst_elevator    (QHsmTst *me);           /* state-handler */
 static QState QHsmTst_stopped   (QHsmTst *me);             /* state-handler */
 static QState QHsmTst_moving  (QHsmTst *me);               /* state-handler */
+static QState QHsmTst_emergency  (QHsmTst *me);               /* state-handler */
 
 /* global objects ----------------------------------------------------------*/
 QHsmTst HSM_QHsmTst;           /* the sole instance of the QHsmTst HSM */
@@ -92,7 +97,7 @@ QState QHsmTst_elevator(QHsmTst *me) {
 			}
 		case EMERG_SIG: {
 			BSP_display("elevator-Emergency");
-			return Q_TRAN(&QHsmTst_stopped);
+			return Q_TRAN(&QHsmTst_emergency);
 		}
 		case TERMINATE_SIG: {
 			BSP_exit();
@@ -190,12 +195,10 @@ QState QHsmTst_stopped(QHsmTst *me) {
             		return Q_HANDLED();
         	}
 			case EMERG_SIG: {
-				BSP_display("stopped-Emergency");
-				HSM_QHsmTst.floor_pen[0] = 1; //Clear all floors except the first
-				HSM_QHsmTst.floor_pen[1] = 0;
-				HSM_QHsmTst.floor_pen[2] = 0;
-				HSM_QHsmTst.floor_pen[3] = 0;
-				HSM_QHsmTst.floor_pen[4] = 0;
+				BSP_display("stopped-Emergency\n");
+				HSM_QHsmTst.emergency_call_time = simTime; /*Store the time when it is requested*/
+				HSM_QHsmTst.emergency_calls++;                  /*Increment the number of calls to that floor*/
+				return Q_TRAN(&QHsmTst_emergency);; 
 			}
 	}
 	return Q_SUPER(&QHsmTst_elevator);
@@ -271,6 +274,73 @@ QState QHsmTst_moving(QHsmTst *me) {
 				HSM_QHsmTst.floor_curr_call_time[4] = simTime;
 				HSM_QHsmTst.floor_calls[4]++;
 			}
+            		return Q_HANDLED();
+        	}
+			case EMERG_SIG: {
+					BSP_display("moving-Emergency\n"); 
+					HSM_QHsmTst.emergency_call_time = simTime;
+					HSM_QHsmTst.emergency_calls++;
+					return Q_TRAN(&QHsmTst_emergency);
+			}
+	}
+	return Q_SUPER(&QHsmTst_elevator);
+}
+
+QState QHsmTst_emergency(QHsmTst *me) {
+	switch (Q_SIG(me)) {
+		case Q_ENTRY_SIG: {
+			BSP_display("emergency-ENTRY\n");
+				HSM_QHsmTst.floor_pen[0] = 0; //Clear all floors 
+				HSM_QHsmTst.floor_pen[1] = 0;
+				HSM_QHsmTst.floor_pen[2] = 0;
+				HSM_QHsmTst.floor_pen[3] = 0;
+				HSM_QHsmTst.floor_pen[4] = 0;
+
+				if(HSM_QHsmTst.move_time != 0) //Elevator was not in motion - if it was moving or not at a floor, move_time would not be zero
+				{
+					HSM_QHsmTst.curr_dir = -1; //Start moving down to first floor 
+
+				}
+
+				if(HSM_QHsmTst.curr_floor == 0) //Already on first floor
+				{
+					return Q_TRAN(&QHsmTst_stopped);
+				}
+				else
+				{
+					return Q_HANDLED();
+				}
+        	}
+        	case Q_EXIT_SIG: {
+            		BSP_display("emergency-EXIT\n");
+					HSM_QHsmTst.emergency_total_time += (simTime - HSM_QHsmTst.floor_curr_call_time[HSM_QHsmTst.curr_floor]); //Keep cumulative sum of service times
+	    			HSM_QHsmTst.emergency_call_time = -1; /*Reset the call time*/
+            		return Q_HANDLED();
+        	}
+        	case TICK_SIG: {
+            		BSP_display("emergency-TICK\n");
+	    		if (HSM_QHsmTst.move_time < MOVE_TIME_F-1) HSM_QHsmTst.move_time++;
+	    		else {
+				HSM_QHsmTst.move_time = 0;
+				HSM_QHsmTst.curr_floor = HSM_QHsmTst.curr_floor + HSM_QHsmTst.curr_dir; /*Update the current floor*/
+				if(HSM_QHsmTst.curr_floor == 0) //Reached first floor
+				{
+					return Q_TRAN(&QHsmTst_stopped);
+				}
+				else //Reached a different floor 
+				{
+					printf("EMERGENCY: Current floor - %d\n", HSM_QHsmTst.curr_floor);
+					HSM_QHsmTst.curr_dir = -1; //Move down
+				}
+		 	} 
+            		return Q_HANDLED();
+        	}
+        	case F1_SIG: 
+        	case F2_SIG: 
+        	case F3_SIG: 
+        	case F4_SIG: 
+        	case F5_SIG: {
+            		BSP_display("emergency-Ignore\n");
             		return Q_HANDLED();
         	}
 	}
@@ -353,5 +423,8 @@ void printData(void){
 		printf("F%d average time: %f\n",x+1, HSM_QHsmTst.floor_total_time[x]/HSM_QHsmTst.floor_calls[x]);
 		printf("\n");
 	}
+	printf("Emergency calls: %d\n", HSM_QHsmTst.emergency_calls);
+		printf("Emergency average time: %f\n", HSM_QHsmTst.emergency_total_time/HSM_QHsmTst.emergency_calls);
+		printf("\n");
 	return;
 }
