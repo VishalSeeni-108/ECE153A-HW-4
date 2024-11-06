@@ -60,6 +60,9 @@ void QHsmTst_ctor(void) {
 		HSM_QHsmTst.floor_curr_call_time[x]=-1;
 		HSM_QHsmTst.floor_total_time[x]=0;
 		}
+
+	HSM_QHsmTst.emergency_call_time = -1;  
+	HSM_QHsmTst.emergency_total_time = 0; 
 }
 
 /*..........................................................................*/
@@ -302,7 +305,7 @@ QState QHsmTst_emergency(QHsmTst *me) {
 
 				}
 
-				if(HSM_QHsmTst.curr_floor == 0) //Already on first floor
+				if(HSM_QHsmTst.curr_floor <= 0) //Already on first floor
 				{
 					return Q_TRAN(&QHsmTst_stopped);
 				}
@@ -313,7 +316,7 @@ QState QHsmTst_emergency(QHsmTst *me) {
         	}
         	case Q_EXIT_SIG: {
             		BSP_display("emergency-EXIT\n");
-					HSM_QHsmTst.emergency_total_time += (simTime - HSM_QHsmTst.floor_curr_call_time[HSM_QHsmTst.curr_floor]); //Keep cumulative sum of service times
+					HSM_QHsmTst.emergency_total_time += (simTime - HSM_QHsmTst.emergency_call_time); //Keep cumulative sum of service times
 	    			HSM_QHsmTst.emergency_call_time = -1; /*Reset the call time*/
             		return Q_HANDLED();
         	}
@@ -323,7 +326,7 @@ QState QHsmTst_emergency(QHsmTst *me) {
 	    		else {
 				HSM_QHsmTst.move_time = 0;
 				HSM_QHsmTst.curr_floor = HSM_QHsmTst.curr_floor + HSM_QHsmTst.curr_dir; /*Update the current floor*/
-				if(HSM_QHsmTst.curr_floor == 0) //Reached first floor
+				if(HSM_QHsmTst.curr_floor <= 0) //Reached first floor
 				{
 					return Q_TRAN(&QHsmTst_stopped);
 				}
